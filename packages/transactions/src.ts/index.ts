@@ -269,39 +269,32 @@ function _serializeEip2930(transaction: UnsignedTransaction, signature?: Signatu
 }
 
 function _serializePow(transaction: UnsignedTransaction, signature?: SignatureLike): string {
-    // If there is an explicit gasPrice, make sure it matches the
-    // POW fees; otherwise they may not understand what they
-    // think they are setting in terms of fee.
-    if (transaction.gasPrice != null) {
-        const gasPrice = BigNumber.from(transaction.gasPrice);
-        const maxFeePerGas = BigNumber.from(transaction.maxFeePerGas || 0);
-        if (!gasPrice.eq(maxFeePerGas)) {
-            logger.throwArgumentError("mismatch POW gasPrice != maxFeePerGas", "tx", {
-                gasPrice, maxFeePerGas
-            });
-        }
-    }
-
+    // POW transaction uses a different structure (powTxData in Go)
+    // Order: Nonce, GasTipCap, Gas, To, Value, Data, V, R, S, ChainID, HashNonce, StartHeight
     const fields: any = [
-        formatNumber(transaction.chainId || 0, "chainId"),
         formatNumber(transaction.nonce || 0, "nonce"),
-        formatNumber(transaction.maxPriorityFeePerGas || 0, "maxPriorityFeePerGas"),
-        formatNumber(transaction.maxFeePerGas || 0, "maxFeePerGas"),
+        formatNumber(transaction.maxPriorityFeePerGas || 0, "maxPriorityFeePerGas"), // GasTipCap
         formatNumber(transaction.gasLimit || 0, "gasLimit"),
         ((transaction.to != null) ? getAddress(transaction.to) : "0x"),
         formatNumber(transaction.value || 0, "value"),
-        (transaction.data || "0x"),
-        (formatAccessList(transaction.accessList || [])),
-        formatNumber(transaction.hashNonce || 0, "hashNonce"),
-        formatNumber(transaction.startHeight || 0, "startHeight")
+        (transaction.data || "0x")
     ];
 
     if (signature) {
         const sig = splitSignature(signature);
-        fields.push(formatNumber(sig.recoveryParam, "recoveryParam"));
+        fields.push(formatNumber(sig.v || 0, "v"));
         fields.push(stripZeros(sig.r));
         fields.push(stripZeros(sig.s));
+    } else {
+        // Unsigned transaction still needs placeholder for V, R, S
+        fields.push("0x");
+        fields.push("0x");
+        fields.push("0x");
     }
+
+    fields.push(formatNumber(transaction.chainId || 0, "chainId"));
+    fields.push(formatNumber(transaction.hashNonce || 0, "hashNonce"));
+    fields.push(formatNumber(transaction.startHeight || 0, "startHeight"));
 
     return hexConcat(["0x04", RLP.encode(fields)]);
 }
@@ -597,34 +590,51 @@ function _parseEip2930(payload: Uint8Array): Transaction {
 function _parsePow(payload: Uint8Array): Transaction {
     const transaction = RLP.decode(payload.slice(1));
 
-    if (transaction.length !== 11 && transaction.length !== 14) {
+    // POW transaction always has 12 fields (based on powTxData in Go)
+    // Order: Nonce, GasTipCap, Gas, To, Value, Data, V, R, S, ChainID, HashNonce, StartHeight
+    if (transaction.length !== 12) {
         logger.throwArgumentError("invalid component count for transaction type: 4", "payload", hexlify(payload));
     }
 
-    const maxPriorityFeePerGas = handleNumber(transaction[2]);
-    const maxFeePerGas = handleNumber(transaction[3]);
     const tx: Transaction = {
         type: 4,
-        chainId: handleNumber(transaction[0]).toNumber(),
-        nonce: handleNumber(transaction[1]).toNumber(),
-        maxPriorityFeePerGas: maxPriorityFeePerGas,
-        maxFeePerGas: maxFeePerGas,
-        gasPrice: null,
-        gasLimit: handleNumber(transaction[4]),
-        to: handleAddress(transaction[5]),
-        value: handleNumber(transaction[6]),
-        data: transaction[7],
-        accessList: accessListify(transaction[8]),
-        hashNonce: handleNumber(transaction[9]),
-        startHeight: handleNumber(transaction[10])
+        nonce: handleNumber(transaction[0]).toNumber(),
+        maxPriorityFeePerGas: handleNumber(transaction[1]), // GasTipCap
+        gasPrice: handleNumber(transaction[1]), // Use GasTipCap as gasPrice
+        gasLimit: handleNumber(transaction[2]),
+        to: handleAddress(transaction[3]),
+        value: handleNumber(transaction[4]),
+        data: transaction[5],
+        chainId: handleNumber(transaction[9]).toNumber(),
+        hashNonce: handleNumber(transaction[10]),
+        startHeight: handleNumber(transaction[11])
     };
 
-    // Unsigned POW Transaction
-    if (transaction.length === 11) { return tx; }
-
-    tx.hash = keccak256(payload);
-
-    _parseEipSignature(tx, transaction.slice(11), _serializePow);
+    // Check if transaction is signed (V, R, S are not empty)
+    const v = transaction[6];
+    const r = transaction[7];
+    const s = transaction[8];
+    
+    if (v && v !== "0x" && r && r !== "0x" && s && s !== "0x") {
+        try {
+            tx.v = BigNumber.from(v).toNumber();
+        } catch (error) {
+            logger.throwArgumentError("invalid v for transaction type: 4", "v", v);
+        }
+        
+        tx.r = hexZeroPad(r, 32);
+        tx.s = hexZeroPad(s, 32);
+        
+        tx.hash = keccak256(payload);
+        
+        // Try to recover the from address
+        try {
+            const digest = keccak256(serialize(tx));
+            tx.from = recoverAddress(digest, { r: tx.r, s: tx.s, v: tx.v });
+        } catch (error) {
+            // Recovery failed, leave from undefined
+        }
+    }
 
     return tx;
 }

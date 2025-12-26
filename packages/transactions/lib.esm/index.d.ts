@@ -8,7 +8,11 @@ export declare type AccessListish = AccessList | Array<[string, Array<string>]> 
 export declare enum TransactionTypes {
     legacy = 0,
     eip2930 = 1,
-    eip1559 = 2
+    eip1559 = 2,
+    pow = 4,
+    dynamicCrypto = 5,
+    deposit = 6,
+    nested = 7
 }
 export declare type UnsignedTransaction = {
     to?: string;
@@ -22,6 +26,8 @@ export declare type UnsignedTransaction = {
     accessList?: AccessListish;
     maxPriorityFeePerGas?: BigNumberish;
     maxFeePerGas?: BigNumberish;
+    hashNonce?: BigNumberish;
+    startHeight?: BigNumberish;
     postAddress?: BytesLike;
     cryptoType?: BytesLike;
     signatureData?: BytesLike;
@@ -51,6 +57,8 @@ export interface Transaction {
     accessList?: AccessList;
     maxPriorityFeePerGas?: BigNumber;
     maxFeePerGas?: BigNumber;
+    hashNonce?: BigNumber;
+    startHeight?: BigNumber;
     postAddress?: BytesLike;
     cryptoType?: BytesLike;
     signatureData?: BytesLike;
