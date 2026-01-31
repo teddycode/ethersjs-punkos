@@ -2058,6 +2058,7 @@
 	      this.words[i] = carry;
 	      this.length++;
 	    }
+	    this.length = num === 0 ? 1 : this.length;
 
 	    return isNegNum ? this.ineg() : this;
 	  };
@@ -13275,6 +13276,7 @@
 	      this.words[i] = carry;
 	      this.length++;
 	    }
+	    this.length = num === 0 ? 1 : this.length;
 
 	    return this;
 	  };

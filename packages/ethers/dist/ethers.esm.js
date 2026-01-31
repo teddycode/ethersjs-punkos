@@ -2052,6 +2052,7 @@ var bn = createCommonjsModule(function (module) {
       this.words[i] = carry;
       this.length++;
     }
+    this.length = num === 0 ? 1 : this.length;
 
     return isNegNum ? this.ineg() : this;
   };
