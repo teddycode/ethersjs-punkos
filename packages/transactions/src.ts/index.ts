@@ -423,6 +423,19 @@ function _serializeDynamicCrypto(transaction: UnsignedTransaction, signature?: S
 }
 
 function _serializeDeposit(transaction: UnsignedTransaction, signature?: SignatureLike): string {
+    // If there is an explicit gasPrice, make sure it matches the
+    // EIP-1559 fees; otherwise they may not understand what they
+    // think they are setting in terms of fee.
+    if (transaction.gasPrice != null) {
+        const gasPrice = BigNumber.from(transaction.gasPrice);
+        const maxFeePerGas = BigNumber.from(transaction.maxFeePerGas || 0);
+        if (!gasPrice.eq(maxFeePerGas)) {
+            logger.throwArgumentError("mismatch Deposit gasPrice != maxFeePerGas", "tx", {
+                gasPrice, maxFeePerGas
+            });
+        }
+    }
+
     const fields: any = [
         formatNumber(transaction.chainId || 0, "chainId"),
         formatNumber(transaction.nonce || 0, "nonce"),
@@ -432,9 +445,9 @@ function _serializeDeposit(transaction: UnsignedTransaction, signature?: Signatu
         ((transaction.to != null) ? getAddress(transaction.to) : "0x"),
         formatNumber(transaction.value || 0, "value"),
         (transaction.data || "0x"),
-        (transaction.deployerAddress || "0x"),
-        (transaction.investorAddress || "0x"),
-        (transaction.beneficiaryAddress || "0x"),
+        ((transaction.deployerAddress != null) ? getAddress(hexlify(transaction.deployerAddress)) : "0x"),
+        ((transaction.investorAddress != null) ? getAddress(hexlify(transaction.investorAddress)) : "0x"),
+        ((transaction.beneficiaryAddress != null) ? getAddress(hexlify(transaction.beneficiaryAddress)) : "0x"),
         formatNumber(transaction.stakedAmount || 0, "stakedAmount"),
         formatNumber(transaction.stakedTime || 0, "stakedTime"),
     ];
@@ -833,5 +846,127 @@ export function parse(rawTransaction: BytesLike): Transaction {
         operation: "parseTransaction",
         transactionType: payload[0]
     });
+}
+
+
+///////////////////////////////
+// PunkOS Constants
+
+// AlphaIndex base: 10000 represents 100%
+export const ALPHA_INDEX_BASE = 10000;
+
+// Staked time unit: 1 = half year, 2 = 1 year, etc.
+export const STAKED_TIME_UNIT_HALF_YEAR = 1;
+
+// CoinMixer contract address
+export const COINMIXER_ADDRESS = "0x445aB2C84c4144297f2F08fd8AC05406F14ff790";
+
+// Data prefix constants
+export const DATA_PREFIX_TOKEN_TRANSITION  = "0x0d02";
+export const DATA_PREFIX_TAINTED_LOCK      = "0x0d03";
+export const DATA_PREFIX_TAINTED_UNLOCK    = "0x0d04";
+export const DATA_PREFIX_COINMIXER_ADD     = "0x0d05";
+export const DATA_PREFIX_CGI_TO_PUNK       = "0x0d07";
+export const DATA_PREFIX_UNSTAKE           = "0x0d09";
+export const DATA_PREFIX_MINER_CLAIM_FEE   = "0x0d0a";
+export const DATA_PREFIX_ADD_BENEFICIARY   = "0x0d0b";
+export const DATA_PREFIX_REMOVE_BENEFICIARY = "0x0d0c";
+export const DATA_PREFIX_SET_MAX_INVESTMENT = "0x0d0d";
+
+
+///////////////////////////////
+// PunkOS Data Encoding Helpers
+
+/**
+ * Encode data for unstaking / claiming principal + interest (DepositTx, type 0x06).
+ * Usage: set as `data` field, with `to` = contract address,
+ *        `stakedAmount` = 0, `stakedTime` = 0.
+ */
+export function encodeUnstakeData(): string {
+    return DATA_PREFIX_UNSTAKE;
+}
+
+/**
+ * Encode data for adding/updating a beneficiary (standard tx, To = contract).
+ * @param beneficiaryAddress - The beneficiary address (20 bytes)
+ * @param alphaIndex - The alpha index (0 ~ 10000), sum of all beneficiaries must not exceed 10000
+ */
+export function encodeAddBeneficiaryData(beneficiaryAddress: string, alphaIndex: number): string {
+    if (alphaIndex < 0 || alphaIndex > ALPHA_INDEX_BASE) {
+        logger.throwArgumentError("alphaIndex must be between 0 and " + ALPHA_INDEX_BASE, "alphaIndex", alphaIndex);
+    }
+    const addr = getAddress(beneficiaryAddress);
+    const indexBytes = hexZeroPad(BigNumber.from(alphaIndex).toHexString(), 8);
+    return hexConcat([DATA_PREFIX_ADD_BENEFICIARY, addr, indexBytes]);
+}
+
+/**
+ * Encode data for removing a beneficiary (standard tx, To = contract).
+ * @param beneficiaryAddress - The beneficiary address to remove (20 bytes)
+ */
+export function encodeRemoveBeneficiaryData(beneficiaryAddress: string): string {
+    const addr = getAddress(beneficiaryAddress);
+    return hexConcat([DATA_PREFIX_REMOVE_BENEFICIARY, addr]);
+}
+
+/**
+ * Encode data for setting max investment amount (standard tx, To = contract).
+ * @param maxAmount - The max investment amount (uint64, big-endian)
+ */
+export function encodeSetMaxInvestmentData(maxAmount: BigNumberish): string {
+    const amountBytes = hexZeroPad(BigNumber.from(maxAmount).toHexString(), 8);
+    return hexConcat([DATA_PREFIX_SET_MAX_INVESTMENT, amountBytes]);
+}
+
+/**
+ * Encode data for miner claiming annual fee (standard tx, To = contract).
+ * Geth requires len(Data) >= 3, so a padding byte is appended.
+ */
+export function encodeMinerClaimFeeData(): string {
+    return hexConcat([DATA_PREFIX_MINER_CLAIM_FEE, "0x00"]);
+}
+
+/**
+ * Encode data for token transition (standard tx, To = recipient).
+ * @param value - The token amount to transfer
+ */
+export function encodeTokenTransitionData(value: BigNumberish): string {
+    const valueBytes = stripZeros(BigNumber.from(value).toHexString());
+    return hexConcat([DATA_PREFIX_TOKEN_TRANSITION, valueBytes]);
+}
+
+/**
+ * Encode data for PUNK tainted lock (standard tx).
+ * @param addresses - Array of addresses to lock
+ */
+export function encodeTaintedLockData(addresses: string[]): string {
+    if (addresses.length === 0 || addresses.length > 255) {
+        logger.throwArgumentError("addresses length must be between 1 and 255", "addresses", addresses.length);
+    }
+    const count = hexlify(addresses.length);
+    const addrData = addresses.map((addr) => getAddress(addr));
+    return hexConcat([DATA_PREFIX_TAINTED_LOCK, hexZeroPad(count, 1), ...addrData]);
+}
+
+/**
+ * Encode data for PUNK tainted unlock (standard tx).
+ * @param addresses - Array of addresses to unlock
+ */
+export function encodeTaintedUnlockData(addresses: string[]): string {
+    if (addresses.length === 0 || addresses.length > 255) {
+        logger.throwArgumentError("addresses length must be between 1 and 255", "addresses", addresses.length);
+    }
+    const count = hexlify(addresses.length);
+    const addrData = addresses.map((addr) => getAddress(addr));
+    return hexConcat([DATA_PREFIX_TAINTED_UNLOCK, hexZeroPad(count, 1), ...addrData]);
+}
+
+/**
+ * Encode data for CGI to PUNK conversion (standard tx, To = recipient).
+ * @param value - The CGI amount to convert
+ */
+export function encodeCgiToPunkData(value: BigNumberish): string {
+    const valueBytes = stripZeros(BigNumber.from(value).toHexString());
+    return hexConcat([DATA_PREFIX_CGI_TO_PUNK, valueBytes]);
 }
 

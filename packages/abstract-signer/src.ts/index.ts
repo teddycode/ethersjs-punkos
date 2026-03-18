@@ -10,7 +10,7 @@ import { version } from "./_version";
 const logger = new Logger(version);
 
 const allowedTransactionKeys: Array<string> = [
-    "accessList", "ccipReadEnabled", "chainId", "customData", "data", "from", "gasLimit", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "to", "type", "value", "postAddress", "cryptoType", "signatureData", "publicKey", "deployerAddress", "investorAddress", "beneficiaryAddress", "stakeAmount", "stakeTime", "nestingDepth" ,"innerTxData"
+    "accessList", "ccipReadEnabled", "chainId", "customData", "data", "from", "gasLimit", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "to", "type", "value", "postAddress", "cryptoType", "signatureData", "publicKey", "deployerAddress", "investorAddress", "beneficiaryAddress", "stakedAmount", "stakedTime", "nestingDepth", "innerTxData"
 ];
 
 const forwardErrors = [
@@ -230,7 +230,7 @@ export abstract class Signer {
             }else if (tx.maxFeePerGas!=null && tx.maxPriorityFeePerGas!=null){
                 if (tx.publicKey!=null && tx.signatureData!=null && tx.cryptoType!=null && tx.postAddress!=null){
                     tx.type=5
-                }else if (tx.deployerAddress!=null && tx.investorAddress!=null && tx.beneficiaryAddress!=null && tx.stakedAmount!==0 && tx.stakedTime!==0){
+                }else if (tx.deployerAddress!=null && tx.investorAddress!=null && tx.beneficiaryAddress!=null){
                     tx.type=6
                 }else if (tx.nestingDepth!==0 && tx.innerTxData!=null)
                     tx.type=7

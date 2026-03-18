@@ -37,6 +37,7 @@
     "test-coverage": "nyc --report-dir=output --reporter=lcov --reporter=text mocha --reporter ./packages/tests/reporter-keepalive ./packages/tests/lib/test-*.js | tee output/summary.txt",
     "test-node": "mocha --no-colors --reporter ./packages/tests/reporter ./packages/tests/lib/test-*.js",
     "test-punkos": "mocha --reporter ./packages/tests/reporter ./packages/tests/lib/test-providers-punkos.js",
+    "test-punkos-stake": "node ./geth_test/stake-deposit-test.js",
     "test-react": "npm run _test-dist && pushd misc/ReactNativeTestApp && ./run-tests.sh && popd",
     "test": "npm run build-all && npm run test-node",
     "build-docs": "flatworm docs.wrm docs",

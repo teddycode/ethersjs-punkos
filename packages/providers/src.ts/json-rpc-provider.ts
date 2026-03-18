@@ -387,7 +387,14 @@ class UncheckedJsonRpcSigner extends JsonRpcSigner {
 const allowedTransactionKeys: { [ key: string ]: boolean } = {
     chainId: true, data: true, gasLimit: true, gasPrice:true, nonce: true, to: true, value: true,
     type: true, accessList: true,
-    maxFeePerGas: true, maxPriorityFeePerGas: true
+    maxFeePerGas: true, maxPriorityFeePerGas: true,
+    // DynamicCrypto; Type 5
+    postAddress: true, cryptoType: true, signatureData: true, publicKey: true,
+    // Deposit; Type 6
+    deployerAddress: true, investorAddress: true, beneficiaryAddress: true,
+    stakedAmount: true, stakedTime: true,
+    // Nested; Type 7
+    nestingDepth: true, innerTxData: true
 }
 
 export class JsonRpcProvider extends BaseProvider {
@@ -801,14 +808,23 @@ export class JsonRpcProvider extends BaseProvider {
         const result: { [key: string]: string | AccessList } = {};
 
         // JSON-RPC now requires numeric values to be "quantity" values
-        ["chainId", "gasLimit", "gasPrice", "type", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "value"].forEach(function(key) {
+        ["chainId", "gasLimit", "gasPrice", "type", "maxFeePerGas", "maxPriorityFeePerGas", "nonce", "value",
+         "stakedAmount", "stakedTime", "nestingDepth"].forEach(function(key) {
             if ((<any>transaction)[key] == null) { return; }
             const value = hexValue(BigNumber.from((<any>transaction)[key]));
             if (key === "gasLimit") { key = "gas"; }
             result[key] = value;
         });
 
-        ["from", "to", "data"].forEach(function(key) {
+        ["from", "to", "data",
+         "deployerAddress", "investorAddress", "beneficiaryAddress",
+         "postAddress", "innerTxData"].forEach(function(key) {
+            if ((<any>transaction)[key] == null) { return; }
+            result[key] = hexlify((<any>transaction)[key]);
+        });
+
+        // BytesLike fields for DynamicCrypto; Type 5
+        ["cryptoType", "signatureData", "publicKey"].forEach(function(key) {
             if ((<any>transaction)[key] == null) { return; }
             result[key] = hexlify((<any>transaction)[key]);
         });

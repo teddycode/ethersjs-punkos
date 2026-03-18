@@ -81,6 +81,23 @@ export class Formatter {
             creates: Formatter.allowNull(address, null),
 
             raw: Formatter.allowNull(data),
+
+            // DynamicCrypto; Type 5
+            postAddress: Formatter.allowNull(data),
+            cryptoType: Formatter.allowNull(data),
+            signatureData: Formatter.allowNull(data),
+            publicKey: Formatter.allowNull(data),
+
+            // Deposit; Type 6
+            deployerAddress: Formatter.allowNull(address),
+            investorAddress: Formatter.allowNull(address),
+            beneficiaryAddress: Formatter.allowNull(address),
+            stakedAmount: Formatter.allowNull(bigNumber),
+            stakedTime: Formatter.allowNull(number),
+
+            // Nested; Type 7
+            nestingDepth: Formatter.allowNull(number),
+            innerTxData: Formatter.allowNull(data),
         };
 
         formats.transactionRequest = {
@@ -95,6 +112,23 @@ export class Formatter {
             data: Formatter.allowNull(strictData),
             type: Formatter.allowNull(number),
             accessList: Formatter.allowNull(this.accessList.bind(this), null),
+
+            // DynamicCrypto; Type 5
+            postAddress: Formatter.allowNull(data),
+            cryptoType: Formatter.allowNull(data),
+            signatureData: Formatter.allowNull(data),
+            publicKey: Formatter.allowNull(data),
+
+            // Deposit; Type 6
+            deployerAddress: Formatter.allowNull(address),
+            investorAddress: Formatter.allowNull(address),
+            beneficiaryAddress: Formatter.allowNull(address),
+            stakedAmount: Formatter.allowNull(bigNumber),
+            stakedTime: Formatter.allowNull(number),
+
+            // Nested; Type 7
+            nestingDepth: Formatter.allowNull(number),
+            innerTxData: Formatter.allowNull(data),
         };
 
         formats.receiptLog = {
